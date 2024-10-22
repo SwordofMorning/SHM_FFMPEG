@@ -12,4 +12,12 @@ ADD_EXECUTABLE(${APP_NAME} ${SRC_LIST})
 # Link lib and so
 TARGET_LINK_LIBRARIES(
     ${APP_NAME}
+    # ffmpeg
+    libavformat.so;
+    libswscale.so;
+    libavcodec.so;
+    libavutil.so;
+    libavdevice.so;
+    libavdevice.so;
+    libswresample.so;
 )
