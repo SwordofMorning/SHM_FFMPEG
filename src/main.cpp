@@ -19,6 +19,8 @@ static int video_is_eof;
 #define STREAM_PIX_FMT AV_PIX_FMT_YUV420P /* default pix_fmt */
 #define VIDEO_CODEC_ID AV_CODEC_ID_H264
 
+static uint8_t *yuv_buffer = NULL;
+
 /* video output */
 static AVFrame *frame;
 static AVPicture src_picture, dst_picture;
@@ -102,23 +104,45 @@ static int open_video(AVFormatContext *oc, AVCodec *codec, AVStream *st)
 }
 
 /* Prepare a dummy image. */
-static void fill_yuv_image(AVPicture *pict, int frame_index, int width, int height)
+static void fill_yuv_buffer(uint8_t *buffer, int width, int height, int frame_index) 
 {
-    int x, y, i;
-
-    i = frame_index;
+    int x, y, i = frame_index;
 
     /* Y */
     for (y = 0; y < height; y++)
         for (x = 0; x < width; x++)
-            pict->data[0][y * pict->linesize[0] + x] = x + y + i * 3;
+            buffer[y * width + x] = x + y + i * 3;
 
     /* Cb and Cr */
     for (y = 0; y < height / 2; y++) {
         for (x = 0; x < width / 2; x++) {
-            pict->data[1][y * pict->linesize[1] + x] = 128 + y + i * 2;
-            pict->data[2][y * pict->linesize[2] + x] = 64 + x + i * 5;
+            buffer[width * height + y * width / 2 + x] = 128 + y + i * 2;
+            buffer[width * height * 5 / 4 + y * width / 2 + x] = 64 + x + i * 5;
         }
+    }
+}
+
+static void fill_av_frame(AVFrame *frame, uint8_t *buffer, int width, int height)
+{
+    // 复制Y分量 
+    for (int y = 0; y < height; y++) {
+        memcpy(frame->data[0] + y * frame->linesize[0], 
+               buffer + y * width,
+               width);
+    }
+    
+    // 复制U分量
+    for (int y = 0; y < height / 2; y++) {
+        memcpy(frame->data[1] + y * frame->linesize[1],
+               buffer + width * height + y * width / 2, 
+               width / 2);
+    }
+    
+    // 复制V分量
+    for (int y = 0; y < height / 2; y++) {
+        memcpy(frame->data[2] + y * frame->linesize[2],
+               buffer + width * height * 5 / 4 + y * width / 2,
+               width / 2); 
     }
 }
 
@@ -127,7 +151,11 @@ static int write_video_frame(AVFormatContext *oc, AVStream *st, int64_t frameCou
     int ret = 0;
     AVCodecContext *c = st->codec;
 
-    // fill_yuv_image(&dst_picture, frameCount, c->width, c->height);
+    // 填充YUV缓冲区
+    fill_yuv_buffer(yuv_buffer, c->width, c->height, frameCount);
+    
+    // 填充AVFrame
+    fill_av_frame(frame, yuv_buffer, c->width, c->height); 
 
     AVPacket pkt = { 0 };
     int got_packet;
@@ -160,6 +188,12 @@ static int write_video_frame(AVFormatContext *oc, AVStream *st, int64_t frameCou
 int main(int argc, char* argv[])
 {
     printf("starting...\n");
+
+    // 分配yuv缓冲区    
+    int video_width = 640;
+    int video_height = 512;
+    int yuv_buffer_size = video_width * video_height * 3 / 2;
+    yuv_buffer = (uint8_t*)malloc(yuv_buffer_size);
 
     const char *url = "rtsp://127.0.0.1:8554/stream";
 
@@ -228,6 +262,7 @@ int main(int argc, char* argv[])
 
 end:
     printf("finished.\n");
+    free(yuv_buffer);
 
     getchar();
 
