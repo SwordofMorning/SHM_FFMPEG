@@ -9,6 +9,13 @@ extern "C"
 #include <libavutil/opt.h>
 #include <libavutil/time.h>
 }
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
+#include <unistd.h>
+#include <stdint.h>
 
 using namespace std;
 
@@ -20,6 +27,12 @@ static int video_is_eof;
 #define VIDEO_CODEC_ID AV_CODEC_ID_H264
 
 static uint8_t *yuv_buffer = NULL;
+
+#define SHM_KEY 1234  
+#define SEM_KEY 5678
+
+static int shmid;
+static int semid; 
 
 /* video output */
 static AVFrame *frame;
@@ -103,59 +116,49 @@ static int open_video(AVFormatContext *oc, AVCodec *codec, AVStream *st)
     return ret;
 }
 
-/* Prepare a dummy image. */
-static void fill_yuv_buffer(uint8_t *buffer, int width, int height, int frame_index) 
+static void fill_av_frame(AVFrame *frame, int width, int height) 
 {
-    int x, y, i = frame_index;
-
-    /* Y */
-    for (y = 0; y < height; y++)
-        for (x = 0; x < width; x++)
-            buffer[y * width + x] = x + y + i * 3;
-
-    /* Cb and Cr */
-    for (y = 0; y < height / 2; y++) {
-        for (x = 0; x < width / 2; x++) {
-            buffer[width * height + y * width / 2 + x] = 128 + y + i * 2;
-            buffer[width * height * 5 / 4 + y * width / 2 + x] = 64 + x + i * 5;
-        }
-    }
-}
-
-static void fill_av_frame(AVFrame *frame, uint8_t *buffer, int width, int height)
-{
-    // 复制Y分量 
+    struct sembuf sem_op;
+    
+    // 等待信号量
+    sem_op.sem_num = 0;
+    sem_op.sem_op = -1;
+    sem_op.sem_flg = 0;
+    semop(semid, &sem_op, 1);
+    
+    // 从共享内存复制YUV数据到AVFrame
     for (int y = 0; y < height; y++) {
-        memcpy(frame->data[0] + y * frame->linesize[0], 
-               buffer + y * width,
+        memcpy(frame->data[0] + y * frame->linesize[0],
+               yuv_buffer + y * width, 
                width);
     }
     
-    // 复制U分量
     for (int y = 0; y < height / 2; y++) {
         memcpy(frame->data[1] + y * frame->linesize[1],
-               buffer + width * height + y * width / 2, 
+               yuv_buffer + width * height + y * width / 2,
                width / 2);
     }
     
-    // 复制V分量
     for (int y = 0; y < height / 2; y++) {
         memcpy(frame->data[2] + y * frame->linesize[2],
-               buffer + width * height * 5 / 4 + y * width / 2,
-               width / 2); 
+               yuv_buffer + width * height * 5 / 4 + y * width / 2, 
+               width / 2);
     }
+    
+    // 释放信号量 
+    sem_op.sem_num = 0;
+    sem_op.sem_op = 1; 
+    sem_op.sem_flg = 0;
+    semop(semid, &sem_op, 1);
 }
 
 static int write_video_frame(AVFormatContext *oc, AVStream *st, int64_t frameCount)
 {
     int ret = 0;
     AVCodecContext *c = st->codec;
-
-    // 填充YUV缓冲区
-    fill_yuv_buffer(yuv_buffer, c->width, c->height, frameCount);
     
     // 填充AVFrame
-    fill_av_frame(frame, yuv_buffer, c->width, c->height); 
+    fill_av_frame(frame, c->width, c->height); 
 
     AVPacket pkt = { 0 };
     int got_packet;
@@ -194,6 +197,13 @@ int main(int argc, char* argv[])
     int video_height = 512;
     int yuv_buffer_size = video_width * video_height * 3 / 2;
     yuv_buffer = (uint8_t*)malloc(yuv_buffer_size);
+
+    // 创建共享内存
+    shmid = shmget(SHM_KEY, yuv_buffer_size, IPC_CREAT | 0666);
+    yuv_buffer = (uint8_t *)shmat(shmid, NULL, 0);
+   
+    // 获取信号量
+    semid = semget(SEM_KEY, 1, IPC_CREAT | 0666);
 
     const char *url = "rtsp://127.0.0.1:8554/stream";
 

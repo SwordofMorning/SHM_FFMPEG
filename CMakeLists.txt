@@ -14,15 +14,17 @@ SET(CMAKE_CXX_COMPILER ${_COMPILER_PATH_}aarch64-buildroot-linux-gnu-g++)
 
 # ===== Setp 2 : Set Flags =====
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s -O3 -lrt -pthread")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s -O3 -lrt -pthread -std=c++20")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s -O3 -lrt -pthread -Wno-deprecated-declarations")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s -O3 -lrt -pthread -std=c++20 -Wno-deprecated-declarations")
 
 # ===== Setp 3 : Set Application Name =====
 
 SET(APP_NAME "vi")
+SET(SHM_NAME "shm")
 
 # ===== Setp 4 : Add Subdirectory =====
 
 ADD_SUBDIRECTORY(src bin)
+ADD_SUBDIRECTORY(shm)
 
 INCLUDE_DIRECTORIES("${_INCLUDE_PATH_}rockchip")
