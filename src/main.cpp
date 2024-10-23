@@ -14,11 +14,10 @@ using namespace std;
 
 static int video_is_eof;
 
-#define STREAM_FRAME_RATE 60
+#define STREAM_FRAME_RATE 30
+#define GOP_SIZE 4
 #define STREAM_PIX_FMT AV_PIX_FMT_YUV420P /* default pix_fmt */
 #define VIDEO_CODEC_ID AV_CODEC_ID_H264
-#define GOP_SIZE 60 /* group of pictures size */
-static int64_t dts = 0;
 
 /* video output */
 static AVFrame *frame;
@@ -47,12 +46,12 @@ static AVStream *add_stream(AVFormatContext *oc, AVCodec **codec, enum AVCodecID
 
             c = st->codec;
             c->codec_id = codec_id;
-            c->bit_rate = 1600000;
+            c->bit_rate = 16000000;
             c->width = 640;
             c->height = 512;
             c->time_base.den = STREAM_FRAME_RATE;
             c->time_base.num = 1;
-            c->gop_size = GOP_SIZE;
+            c->gop_size = GOP_SIZE; /* with out inter frame, only have intra frame */
             c->max_b_frames = 1;
             c->pix_fmt = STREAM_PIX_FMT;
         }
@@ -128,7 +127,7 @@ static int write_video_frame(AVFormatContext *oc, AVStream *st, int64_t frameCou
     int ret = 0;
     AVCodecContext *c = st->codec;
 
-    fill_yuv_image(&dst_picture, frameCount, c->width, c->height);
+    // fill_yuv_image(&dst_picture, frameCount, c->width, c->height);
 
     AVPacket pkt = { 0 };
     int got_packet;
@@ -145,10 +144,7 @@ static int write_video_frame(AVFormatContext *oc, AVStream *st, int64_t frameCou
         if (got_packet) {
             pkt.stream_index = st->index;
             pkt.pts = av_rescale_q_rnd(pkt.pts, c->time_base, st->time_base, AVRounding(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-            pkt.dts = av_rescale_q_rnd(dts, c->time_base, st->time_base, AVRounding(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-            dts += av_rescale_q(1, st->time_base, c->time_base);
-
-            ret = av_interleaved_write_frame(oc, &pkt);
+            ret = av_write_frame(oc, &pkt);
 
             if (ret < 0) {
                 av_log(NULL, AV_LOG_ERROR, "Error while writing video frame.\n");
@@ -220,8 +216,6 @@ int main(int argc, char* argv[])
             goto end;
         }
     }
-
-    av_write_trailer(outContext);
 
     if (video_st) {
         avcodec_close(video_st->codec);
