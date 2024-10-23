@@ -1,4 +1,4 @@
-PROJECT(Core_RTSP)
+PROJECT(VOC_VI)
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
 
@@ -17,7 +17,7 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s -O3 -lrt -pthread -std=c++20")
 
 # ===== Setp 3 : Set Application Name =====
 
-SET(APP_NAME "core_rtsp")
+SET(APP_NAME "vi")
 # SET(TEST_NAME "litelog_test")
 # SET(USAGE_NAME "litelog_usage")
 

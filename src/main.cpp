@@ -14,9 +14,9 @@ using namespace std;
 
 static int video_is_eof;
 
-#define STREAM_FRAME_RATE 120
-#define STREAM_PIX_FMT   AV_PIX_FMT_YUV420P /* default pix_fmt */
-#define VIDEO_CODEC_ID AV_CODEC_ID_MPEG4
+#define STREAM_FRAME_RATE 60
+#define STREAM_PIX_FMT AV_PIX_FMT_YUV420P /* default pix_fmt */
+#define VIDEO_CODEC_ID AV_CODEC_ID_H264
 
 /* video output */
 static AVFrame *frame;
@@ -46,8 +46,8 @@ static AVStream *add_stream(AVFormatContext *oc, AVCodec **codec, enum AVCodecID
             c = st->codec;
             c->codec_id = codec_id;
             c->bit_rate = 1600000;
-            c->width = 1920;
-            c->height = 1080;
+            c->width = 640;
+            c->height = 512;
             c->time_base.den = STREAM_FRAME_RATE;
             c->time_base.num = 1;
             c->gop_size = 0; /* with out inter frame, only have intra frame */
@@ -62,13 +62,11 @@ static int open_video(AVFormatContext *oc, AVCodec *codec, AVStream *st)
 {
     int ret;
     AVCodecContext *c = st->codec;
-    // AVCodecContext *c = avcodec_alloc_context3(codec);
 
     /* open the codec */
-    // ret = avcodec_open2(c, codec, NULL);
     AVDictionary *param = NULL;
-    av_dict_set(&param, "preset", "ultrafast", 0);
-    av_dict_set(&param, "tune", "zerolatency", 0);
+    // av_dict_set(&param, "preset", "ultrafast", 0);
+    // av_dict_set(&param, "tune", "zerolatency", 0);
     ret = avcodec_open2(c, codec, &param);
     if (ret < 0) {
         av_log(NULL, AV_LOG_ERROR, "Could not open video codec.\n", avcodec_get_name(c->codec_id));
@@ -153,6 +151,8 @@ static int write_video_frame(AVFormatContext *oc, AVStream *st, int64_t frameCou
         }
     }
 
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000 / STREAM_FRAME_RATE));
+
     return ret;
 }
 
@@ -168,7 +168,7 @@ int main(int argc, char* argv[])
     int ret = 0;
     int64_t frameCount = 0;
 
-    av_log_set_level(AV_LOG_DEBUG);
+    av_log_set_level(AV_LOG_WARNING);
 
     av_register_all();
     avformat_network_init();
